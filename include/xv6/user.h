@@ -1,3 +1,5 @@
+#include "types.h"
+
 struct stat;
 struct rtcdate;
 
@@ -23,8 +25,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int proccmd(char* buf);
 
-void proccmd(char* buf);
 
 // ulib.c
 int stat(char*, struct stat*);

@@ -54,6 +54,8 @@ int fork1(void);  // Fork but panics on failure.
 void panic(char*);
 struct cmd *parsecmd(char*);
 
+extern int procfs;
+
 // Execute cmd.  Never returns.
 void
 runcmd(struct cmd *cmd)
@@ -162,11 +164,14 @@ main(void)
     // Read and run input commands.
     while (getcmd(buf, sizeof(buf)) >= 0) {
         if(procfs)
-            proc_cmd(buf);
+        {
+          proccmd(buf);
+          continue;
+        }
         if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ') {
             // Chdir must be called by the parent, not the child.
             buf[strlen(buf) - 1] = 0; // chop \n
-            if (buf[3] == 'p' && buf[4] == 'r' && buf[5] == 'o' && buf[6] == 'c') {
+            if (buf[3] == 'p' && buf[4] == 'r' && buf[5] == 'o' && buf[6] == 'c'&&buf[7]==0) {
                 procfs = 1;
                 continue;
             }
