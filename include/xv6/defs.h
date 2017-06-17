@@ -1,5 +1,3 @@
-#include "types.h"
-
 struct buf;
 struct context;
 struct file;
@@ -55,6 +53,10 @@ int             readi(struct inode*, char*, uint, uint);
 void            stati(struct inode*, struct stat*);
 int             writei(struct inode*, char*, uint, uint);
 
+//proc_rw.c
+int readproc(struct inode *ip, char *dst, unsigned int off, unsigned int n);
+//proc_init.c
+void  proc_init(void);
 // ide.c
 void            ideinit(void);
 void            ideintr(void);
@@ -183,10 +185,6 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
-
-//proc
-void            exec_proc_cmd(char* buf);
-
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
