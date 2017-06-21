@@ -1,7 +1,8 @@
 ﻿#include "xv6/types.h"
 #include "xv6/defs.h"
-#include "xv6/proc_fs.h"
+#include "xv6/spinlock.h"
 #include "xv6/sleeplock.h"
+#include "xv6/proc_fs.h"
 #include "xv6/fs.h"
 #include "xv6/file.h"
 #include "xv6/param.h"
@@ -26,7 +27,7 @@ num_to_str(char*str,unsigned int num,unsigned int offset)
   return len;
 }
 
-int 
+/*int 
 proc_dir_to_str(char*str,unsigned short slen,struct proc_dir_entry*dir,unsigned short offset)
 {
   
@@ -36,7 +37,7 @@ int
 inode_dir_to_str(char*str,unsigned short slen,struct inode*dir,unsigned short offset)
 {
   
-}
+}*/
 
 int 
 read_line(char*page,const char*desc,unsigned int num,unsigned int off) 
@@ -44,9 +45,9 @@ read_line(char*page,const char*desc,unsigned int num,unsigned int off)
   int len=0;
   int l=strlen(desc);
   len+=l;
-  safestrcpy(page+off,desc,l);
+  strncpy(page+off,desc,l);
   len+=num_to_str(page,num,off+len);
-  safestrcpy(page+off+len,"\n",1);
+  strncpy(page+off+len,"\n",1);
   len++;
   return len;
 }
@@ -105,8 +106,9 @@ read_dir_list(char *page,void *data)
     de.inum=p->id;
     strncpy(de.name,p->name,p->namelen);
     de.name[p->namelen]='\0';
-    strncpy(page+off,(char*)&de,sizeof(struct dirent));
+    memmove(page+off,(char*)&de,sizeof(struct dirent));
     off+=sizeof(struct dirent);
+    p=p->next;
   }
   return off;
 }
@@ -114,11 +116,25 @@ read_dir_list(char *page,void *data)
 int 
 read_proc_file(struct proc_dir_entry *f, char *page)
 {
+  int n;
   if(f->type==PDE_NONE)
     return -1;
-  else return (*(f->read_proc))(page,f->data);
+  else return (f->read_proc)(page,f->data);
 }
-
+int getsize(struct proc_dir_entry *f)
+{
+  struct proc_dir_entry *p;
+  int s=0;
+  if(f->type==PDE_FILE)
+    return 0;
+  p=f->subdir;
+  while(p!=0)
+  {
+    s=s+sizeof(struct dirent);
+    p=p->next;
+  }
+  return s;
+}
 int readproc(struct inode *ip, char *dst, unsigned int off, unsigned int n)
 {
   struct proc_dir_entry *f;
@@ -129,10 +145,10 @@ int readproc(struct inode *ip, char *dst, unsigned int off, unsigned int n)
   f=&pdetable.pde[ip->inum-1];
   size=read_proc_file(f,page);
   if(size<=off)
-    return -1;
+    return 0;
   if(n+off>size)
     n=size-off;
-  strncpy(dst,page,n);
+  memmove(dst,page+off,n);
   return n;
 }
 
