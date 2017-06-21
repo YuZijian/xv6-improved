@@ -2,13 +2,12 @@
 #include "xv6/defs.h"
 #include "xv6/spinlock.h"
 #include "xv6/sleeplock.h"
-#include "xv6/proc_fs.h"
-#include "xv6/fs.h"
-#include "xv6/file.h"
 #include "xv6/param.h"
 #include "xv6/mmu.h"
 #include "xv6/proc.h"
-
+#include "xv6/fs.h"
+#include "xv6/file.h"
+#include "xv6/proc_fs.h"
 
 int 
 num_to_str(char*str,unsigned int num,unsigned int offset)
@@ -24,9 +23,9 @@ num_to_str(char*str,unsigned int num,unsigned int offset)
   if(len==0) len++;
   for(int i=0;i<len;i++)
     str[offset+i]=numstr[len-1-i];
+  str[offset+len]=0;
   return len;
 }
-
 /*int 
 proc_dir_to_str(char*str,unsigned short slen,struct proc_dir_entry*dir,unsigned short offset)
 {
@@ -40,55 +39,62 @@ inode_dir_to_str(char*str,unsigned short slen,struct inode*dir,unsigned short of
 }*/
 
 int 
-read_line(char*page,const char*desc,unsigned int num,unsigned int off) 
+read_line_uint(char*page,const char*desc,unsigned int num,unsigned int off) 
 {
   int len=0;
   int l=strlen(desc);
+  strncpy(page+off+len,desc,l);
   len+=l;
-  strncpy(page+off,desc,l);
   len+=num_to_str(page,num,off+len);
-  strncpy(page+off+len,"\n",1);
+  page[off+len]='\n';
   len++;
+  return len;
+}
+
+int read_line_char(char*page,const char*desc,char*data,unsigned int off)
+{
+  int l,len=0; 
+  l=strlen(desc);
+  strncpy(page+off+len,desc,l);len+=l;
+  l=strlen(data);
+  strncpy(page+off+len,desc,l);len+=l;
+  page[off+len]='\n';len++;
   return len;
 }
 
 int 
 read_proc_stat(char *page,void *data)
 {
-  int n=0;
-  /*
-  ProcessID:
-  Process state:
-  Parent process:
-  Current directory:
-  Process name:
-  ...
-  
-  */
-  return n;
+  struct proc*m_proc=(struct proc*)data;
+  int off=0;
+  off=off+read_line_uint(page,"process id: ",(uint)m_proc->pid,off);
+  off=off+read_line_char(page,"process name: ",m_proc->name,off);
+  off=off+read_line_uint(page,"process memory size: ",(uint)m_proc->state,off);
+  off=off+read_line_uint(page,"Process state: ",(uint)m_proc->pid,off);
+  off=off+read_line_uint(page,"process to be killed: ",(uint)m_proc->killed,off);
+  page[off]=0;
+  off++;
+  return off;
 }
 
 int 
 read_cpuinfo(char *page, void *data)
 {
-  /*
-  uchar apicid;                // Local APIC ID
-  struct context *scheduler;   // swtch() here to enter scheduler
-  struct taskstate ts;         // Used by x86 to find stack for interrupt
-  struct segdesc gdt[NSEGS];   // x86 global descriptor table
-  volatile uint started;       // Has the CPU started?
-  int ncli;                    // Depth of pushcli nesting.
-  int intena;                  // Were interrupts enabled before pushcli?
-
-  // Cpu-local storage variables; see below
-  struct cpu *cpu;
-  struct proc *proc;           // The currently-running process.
-  */
+  struct cpu*m_cpu;
   int off=0;
   for(int i=0;i<ncpu;i++)
   {
-    off=off+read_line(page,"Local APIC ID:",(int)(cpus[i].apicid),off);
-    off=off+read_line(page,"The currently-running process ID:",(cpus[i].proc)->pid,off);
+    m_cpu=&(cpus[i]);
+    off=off+read_line_uint(page,"CPU has been started:             ",m_cpu->started,off);
+    off=off+read_line_uint(page,"CPU ID:",(int)(m_cpu->apicid),off);
+    off=off+read_line_uint(page,"current PCB running on CPU:       ","",off);
+    off=off+read_line_uint(page,"edi:                              ",m_cpu->scheduler->edi,off);
+    off=off+read_line_uint(page,"esi:                              ",m_cpu->scheduler->esi,off);
+    off=off+read_line_uint(page,"ebx:                              ",m_cpu->scheduler->ebx,off);
+    off=off+read_line_uint(page,"ebp:                              ",m_cpu->scheduler->edi,off);
+    off=off+read_line_uint(page,"eip:                              ",m_cpu->scheduler->eip,off);
+    off=off+read_line_uint(page,"depth of pushcli nesting:         ",(uint)m_cpu->ncli,off);
+    off=off+read_line_uint(page,"enable interrupts before pushcli: ",(uint)m_cpu->intena,off);  
   }
   page[off]=0;
   off++;
@@ -100,7 +106,21 @@ read_dir_list(char *page,void *data)
 {
   struct dirent de;
   int off=0;
-  struct proc_dir_entry*p=((struct proc_dir_entry*)data)->subdir;
+  struct proc_dir_entry*p=(struct proc_dir_entry*)data;
+  
+  de.inum=p->id;
+  strncpy(de.name,".",2);
+  memmove(page+off,(char*)&de,sizeof(struct dirent));
+  off+=sizeof(struct dirent);
+  
+  if(p->parent!=0)
+    de.inum=p->parent->id;
+  else de.inum=1000;
+  strncpy(de.name,"..",3);
+  memmove(page+off,(char*)&de,sizeof(struct dirent));
+  off+=sizeof(struct dirent);
+  
+  p=p->subdir;
   while(p!=0)
   {
     de.inum=p->id;
@@ -124,7 +144,7 @@ read_proc_file(struct proc_dir_entry *f, char *page)
 int getsize(struct proc_dir_entry *f)
 {
   struct proc_dir_entry *p;
-  int s=0;
+  int s=2*sizeof(struct dirent);
   if(f->type==PDE_FILE)
     return 0;
   p=f->subdir;
@@ -152,6 +172,10 @@ int readproc(struct inode *ip, char *dst, unsigned int off, unsigned int n)
   return n;
 }
 
+struct inode* getinode(unsigned int inum)
+{
+  return &(pdetable.pde[inum-1].pinode);
+}
 
 
 
